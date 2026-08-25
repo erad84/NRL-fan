@@ -1,0 +1,334 @@
+{
+  "name": "nrl-watch",
+  "author": "Mark",
+  "version": "1.0.0",
+  "keywords": [
+    "pebble-app",
+    "nrl"
+  ],
+  "private": true,
+  "dependencies": {
+    "@rebble/clay": "^1.0.10",
+    "@resvg/resvg-js": "^2.6.2"
+  },
+  "pebble": {
+    "displayName": "NRL Fan",
+    "uuid": "b11ed82f-904c-4e32-9057-d80755f9b718",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "capabilities": [
+      "configurable",
+      "timeline"
+    ],
+    "targetPlatforms": [
+      "aplite",
+      "basalt",
+      "chalk",
+      "diorite",
+      "emery",
+      "flint",
+      "gabbro"
+    ],
+    "watchapp": {
+      "watchface": false
+    },
+    "messageKeys": [
+      "REQ",
+      "COMP",
+      "STATUS",
+      "TITLE",
+      "CHUNK",
+      "CHUNK_INDEX",
+      "CHUNK_COUNT",
+      "ERROR",
+      "FAV_NRL",
+      "FAV_NRLW",
+      "FAV_ORIGIN",
+      "DEFAULT_COMP",
+      "YEAR",
+      "TEAM",
+      "ROW",
+      "PIN_ALL",
+      "PIN_REMINDER"
+    ],
+    "resources": {
+      "media": [
+        {
+          "menuIcon": true,
+          "type": "png",
+          "name": "IMAGE_MENU_ICON",
+          "file": "images/menu_icon.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_NRL",
+          "file": "images/logo_nrl.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_NRLW",
+          "file": "images/logo_nrlw.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_ORIGIN",
+          "file": "images/logo_origin.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_ORIGIN_W",
+          "file": "images/logo_origin_w.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_TROPHY",
+          "file": "images/logo_trophy.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_ACTION_CHECK",
+          "file": "images/action_check.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_NRL_WHITE",
+          "file": "images/logo_nrl_white.png",
+          "targetPlatforms": ["aplite", "diorite", "flint"]
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_NRLW_WHITE",
+          "file": "images/logo_nrlw_white.png",
+          "targetPlatforms": ["aplite", "diorite", "flint"]
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_ORIGIN_WHITE",
+          "file": "images/logo_origin_white.png",
+          "targetPlatforms": ["aplite", "diorite", "flint"]
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_ORIGIN_W_WHITE",
+          "file": "images/logo_origin_w_white.png",
+          "targetPlatforms": ["aplite", "diorite", "flint"]
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_TROPHY_WHITE",
+          "file": "images/logo_trophy_white.png",
+          "targetPlatforms": ["aplite", "diorite", "flint"]
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_BRO",
+          "file": "images/logo_bro.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_BUL",
+          "file": "images/logo_bul.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_COW",
+          "file": "images/logo_cow.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_DOL",
+          "file": "images/logo_dol.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_DRA",
+          "file": "images/logo_dra.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_EEL",
+          "file": "images/logo_eel.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_KNI",
+          "file": "images/logo_kni.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_PAN",
+          "file": "images/logo_pan.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_SOU",
+          "file": "images/logo_sou.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_CAN",
+          "file": "images/logo_can.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_SYD",
+          "file": "images/logo_syd.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_MAN",
+          "file": "images/logo_man.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_CRO",
+          "file": "images/logo_cro.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_MEL",
+          "file": "images/logo_mel.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_GLD",
+          "file": "images/logo_gld.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_WAR",
+          "file": "images/logo_war.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_WST",
+          "file": "images/logo_wst.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_NSW",
+          "file": "images/logo_nsw.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_QLD",
+          "file": "images/logo_qld.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_BRO_WHITE",
+          "file": "images/logo_bro_white.png",
+          "targetPlatforms": ["aplite", "diorite", "flint"]
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_BUL_WHITE",
+          "file": "images/logo_bul_white.png",
+          "targetPlatforms": ["aplite", "diorite", "flint"]
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_COW_WHITE",
+          "file": "images/logo_cow_white.png",
+          "targetPlatforms": ["aplite", "diorite", "flint"]
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_DOL_WHITE",
+          "file": "images/logo_dol_white.png",
+          "targetPlatforms": ["aplite", "diorite", "flint"]
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_DRA_WHITE",
+          "file": "images/logo_dra_white.png",
+          "targetPlatforms": ["aplite", "diorite", "flint"]
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_EEL_WHITE",
+          "file": "images/logo_eel_white.png",
+          "targetPlatforms": ["aplite", "diorite", "flint"]
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_KNI_WHITE",
+          "file": "images/logo_kni_white.png",
+          "targetPlatforms": ["aplite", "diorite", "flint"]
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_PAN_WHITE",
+          "file": "images/logo_pan_white.png",
+          "targetPlatforms": ["aplite", "diorite", "flint"]
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_SOU_WHITE",
+          "file": "images/logo_sou_white.png",
+          "targetPlatforms": ["aplite", "diorite", "flint"]
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_CAN_WHITE",
+          "file": "images/logo_can_white.png",
+          "targetPlatforms": ["aplite", "diorite", "flint"]
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_SYD_WHITE",
+          "file": "images/logo_syd_white.png",
+          "targetPlatforms": ["aplite", "diorite", "flint"]
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_MAN_WHITE",
+          "file": "images/logo_man_white.png",
+          "targetPlatforms": ["aplite", "diorite", "flint"]
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_CRO_WHITE",
+          "file": "images/logo_cro_white.png",
+          "targetPlatforms": ["aplite", "diorite", "flint"]
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_MEL_WHITE",
+          "file": "images/logo_mel_white.png",
+          "targetPlatforms": ["aplite", "diorite", "flint"]
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_GLD_WHITE",
+          "file": "images/logo_gld_white.png",
+          "targetPlatforms": ["aplite", "diorite", "flint"]
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_WAR_WHITE",
+          "file": "images/logo_war_white.png",
+          "targetPlatforms": ["aplite", "diorite", "flint"]
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_WST_WHITE",
+          "file": "images/logo_wst_white.png",
+          "targetPlatforms": ["aplite", "diorite", "flint"]
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_NSW_WHITE",
+          "file": "images/logo_nsw_white.png",
+          "targetPlatforms": ["aplite", "diorite", "flint"]
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_LOGO_QLD_WHITE",
+          "file": "images/logo_qld_white.png",
+          "targetPlatforms": ["aplite", "diorite", "flint"]
+        }
+      ]
+    }
+  }
+}

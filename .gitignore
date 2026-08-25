@@ -1,0 +1,10 @@
+build/
+node_modules/
+.DS_Store
+*.pbw
+.lock-waf_linux_build
+__pycache__/
+nrl-watch/
+resources/images/_raw/
+tools/.venv/
+tools/.resvg/

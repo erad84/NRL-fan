@@ -1,0 +1,1 @@
+wsl --cd "E:/Mark/webdev/Pebble watch/NRL Watch" bash -lc "export PYTHONUNBUFFERED=1; pebble screenshot --cloudpebble --no-open nrl-live2.png"
