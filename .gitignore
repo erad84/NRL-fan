@@ -2,7 +2,9 @@ build/
 node_modules/
 .DS_Store
 *.pbw
+*.pyc
 .lock-waf_linux_build
+.lock-waf_*
 __pycache__/
 nrl-watch/
 resources/images/_raw/

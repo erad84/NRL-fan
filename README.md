@@ -13,6 +13,17 @@ Pick your NRL club, NRLW club and Origin side in the phone settings. The watch t
 
 Switch competition on the watch: NRL, NRLW, Origin, Origin W.
 
+## Screenshots
+
+![Home](screenshots/nrl-home.png)
+![Live](screenshots/nrl-live.png)
+![Upcoming](screenshots/nrl-upcoming.png)
+![Ladder](screenshots/nrl-ladder.png)
+
+More captures (results, competition switcher, extra layouts) are in [`screenshots/`](screenshots/).
+
+Rebble store listing icons are in [`store/`](store/) (`icon-80.png`, `icon-144.png`). They are not packed into the `.pbw`.
+
 ## Compatibility
 
 SDK 4.33 platforms (this is what the `.pbw` actually contains):
@@ -58,3 +69,23 @@ pebble install --cloudpebble
 Open the gear next to the app in the Pebble phone app to set favourite teams.
 
 Live scores need the Pebble phone app (or a phone-connected emulator). The QEMU phone simulator often cannot reach nrl.com.
+
+### Screenshots from a watch
+
+Navigate to the screen you want, keep Dev Connect on, then:
+
+```sh
+pebble screenshot --cloudpebble --no-open screenshots/nrl-home.png
+```
+
+`--no-open` stops WSL from launching a Linux image viewer. Emulator capture uses `--emulator gabbro` (or `chalk`, `basalt`, …) instead of `--cloudpebble`.
+
+### Asset tools
+
+Logo sources live in `resources/images/_raw/` (gitignored). Regenerating packed watch assets and store icons:
+
+```sh
+python3 tools/fetch_logos.py
+python3 tools/resize_logos.py
+python3 tools/make_store_icons.py
+```
