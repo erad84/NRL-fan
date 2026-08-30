@@ -12,6 +12,11 @@ function settingValue(raw, key, fallback) {
   return value == null || value === "" ? fallback : value;
 }
 
+function boolSetting(raw, key, fallback) {
+  var value = settingValue(raw, key, fallback);
+  return value === true || value === 1 || value === "1" || value === "true";
+}
+
 function readSettings() {
   var raw = {};
   try {
@@ -24,7 +29,8 @@ function readSettings() {
     FAV_NRLW: settingValue(raw, "FAV_NRLW", "Broncos"),
     FAV_ORIGIN: settingValue(raw, "FAV_ORIGIN", "NSW"),
     DEFAULT_COMP: parseInt(settingValue(raw, "DEFAULT_COMP", "0"), 10),
-    PIN_REMINDER: settingValue(raw, "PIN_REMINDER", "60")
+    PIN_REMINDER: settingValue(raw, "PIN_REMINDER", "60"),
+    ODDS_RAW: boolSetting(raw, "ODDS_RAW", false)
   };
 }
 
@@ -301,7 +307,8 @@ function syncDefaults() {
     DEFAULT_COMP: comp,
     FAV_NRL: settings.FAV_NRL,
     FAV_NRLW: settings.FAV_NRLW,
-    FAV_ORIGIN: settings.FAV_ORIGIN
+    FAV_ORIGIN: settings.FAV_ORIGIN,
+    ODDS_RAW: settings.ODDS_RAW ? 1 : 0
   });
 }
 

@@ -1,12 +1,13 @@
 # NRL Fan
 
-A Pebble watch app for NRL fans. Version 1.0.1 targets every current Pebble SDK
+A Pebble watch app for NRL fans. Version 1.0.2 targets every current Pebble SDK
 platform: original Pebble through Pebble Time 2.
 
 Pick your NRL club, NRLW club and Origin side in the phone settings. The watch then shows:
 
 - **My Team** — upcoming remaining games (Select a row to pin it to Timeline)
 - **Live** — current-round scores (auto-refresh every 60s; Select a game for a fullscreen card)
+- **Draw** — every round this season (opens on the current round; Select for that round’s games)
 - **Upcoming** — remaining games for your side, with Timeline pins
 - **Results** — this year’s completed scores
 - **Ladder** — P, W, L, D, PD, Pts (Origin shows the series score instead)

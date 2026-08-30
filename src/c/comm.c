@@ -24,6 +24,19 @@ static void inbox_received(DictionaryIterator *iter, void *context) {
     persist_set_fav(COMP_ORIGIN_WOMEN, fav_origin->value->cstring);
   }
 
+  Tuple *odds_raw = dict_find(iter, MESSAGE_KEY_ODDS_RAW);
+  if (odds_raw) {
+    bool on = false;
+    if (odds_raw->type == TUPLE_CSTRING) {
+      on = odds_raw->value->cstring[0] == '1' || odds_raw->value->cstring[0] == 't' ||
+           odds_raw->value->cstring[0] == 'T';
+    } else {
+      on = odds_raw->value->int32 != 0;
+    }
+    persist_set_odds_raw(on);
+    screens_settings_changed();
+  }
+
   Tuple *req_t = dict_find(iter, MESSAGE_KEY_REQ);
   if (req_t && req_t->value->int32 == REQ_SUMMARY) {
     main_handle_summary(iter);

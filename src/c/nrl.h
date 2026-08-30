@@ -2,8 +2,12 @@
 
 #include <pebble.h>
 
+#if defined(PBL_PLATFORM_APLITE)
 #define NRL_MAX_ITEMS 32
-#define NRL_LINE_LEN 48
+#else
+#define NRL_MAX_ITEMS 36
+#endif
+#define NRL_LINE_LEN 56
 #define NRL_TITLE_LEN 32
 #define NRL_NAME_LEN 32
 #define NRL_ROUND_LEN 16
@@ -27,7 +31,9 @@ enum {
   REQ_HISTORY = 6,
   REQ_STATS = 7,
   REQ_SUMMARY = 8,
-  REQ_PIN = 9
+  REQ_PIN = 9,
+  REQ_DRAW = 10,
+  REQ_DRAW_ROUND = 11
 };
 
 enum {
@@ -55,6 +61,8 @@ const char *persist_get_fav(void);
 const char *persist_fav_animal(void);
 bool persist_get_vibe(void);
 void persist_set_vibe(bool on);
+bool persist_get_odds_raw(void);
+void persist_set_odds_raw(bool on);
 const char *comp_label(int comp);
 const char *club_code_for_nick(const char *nick);
 
@@ -74,3 +82,4 @@ void screens_show_history(void);
 void screens_show_comp_menu(void);
 void screens_handle_payload(DictionaryIterator *iter);
 void screens_handle_send_failed(void);
+void screens_settings_changed(void);

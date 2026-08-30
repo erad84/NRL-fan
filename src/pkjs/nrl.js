@@ -285,6 +285,53 @@ function roundLabel(title, comp) {
   return text.slice(0, 12) || (origin ? "Game" : "Round");
 }
 
+function roundValueOf(r) {
+  if (!r || r.value == null || r.value === "") {
+    return "";
+  }
+  return String(r.value);
+}
+
+function currentRoundValue(data, comp) {
+  var rounds = data.filterRounds || [];
+  var i;
+  var sel = data.selectedRoundId || data.selectedRound;
+  if (sel && typeof sel === "object") {
+    sel = sel.value || sel.id || sel.name;
+  }
+  if (sel != null && sel !== "") {
+    var s = String(sel);
+    for (i = 0; i < rounds.length; i++) {
+      if (!rounds[i]) {
+        continue;
+      }
+      if (roundValueOf(rounds[i]) === s) {
+        return roundValueOf(rounds[i]);
+      }
+      if (String(roundNum(rounds[i].name)) === s) {
+        return roundValueOf(rounds[i]);
+      }
+    }
+  }
+  for (i = 0; i < rounds.length; i++) {
+    if (rounds[i] && (rounds[i].selected || rounds[i].isSelected)) {
+      return roundValueOf(rounds[i]);
+    }
+  }
+  var fx = matchesOf(data);
+  var f = fx.filter(isLive)[0] || fx.filter(isUpcoming)[0];
+  if (f && f.roundTitle) {
+    var want = roundLabel(f.roundTitle, comp);
+    for (i = 0; i < rounds.length; i++) {
+      if (roundLabel(rounds[i].name, comp) === want ||
+          String(rounds[i].name || "") === String(f.roundTitle)) {
+        return roundValueOf(rounds[i]);
+      }
+    }
+  }
+  return "";
+}
+
 function isFinalsMatch(f) {
   return f && f.type === "Match" && /final/i.test(String(f.roundTitle || ""));
 }
@@ -368,7 +415,16 @@ function liveExtra(f) {
   return "";
 }
 
-function matchLine(f, comp) {
+function rawOddsField(f) {
+  var h = parseFloat((f.homeTeam || {}).odds);
+  var a = parseFloat((f.awayTeam || {}).odds);
+  if (!(h > 1) || !(a > 1)) {
+    return "";
+  }
+  return Math.round(h * 100) + "-" + Math.round(a * 100);
+}
+
+function matchLine(f, comp, keepKickoff) {
   if (f.type === "Bye") {
     return [roundLabel(f.roundTitle, comp), shortCode(f.teamNickName), "-", "-", "-", "BYE", ""].join("|");
   }
@@ -380,19 +436,23 @@ function matchLine(f, comp) {
   var extra = formatKickoff((f.clock || {}).kickOffTimeLong);
   if (isLive(f)) {
     state = f.matchState === "HalfTime" ? "HT" : "LIVE";
-    extra = liveExtra(f) || extra;
+    if (!keepKickoff) {
+      extra = liveExtra(f) || extra;
+    }
   } else if (isComplete(f)) {
     state = "FT";
   }
-  return [
+  var parts = [
     roundLabel(f.roundTitle, comp),
     shortCode(home.nickName),
     hs,
     shortCode(away.nickName),
     as,
     state,
-    extra
-  ].join("|");
+    extra,
+    rawOddsField(f)
+  ];
+  return parts.join("|");
 }
 
 function drawUrl(comp, teamId, year) {
@@ -667,6 +727,70 @@ function handleRequest(comp, req, fav, year, team, callback) {
         return;
       }
       callback(null, ladderStats(data, team || fav));
+    });
+    return;
+  }
+
+  if (req === 10) {
+    loadDraw(comp, null, year, CACHE_DRAW, function (err, data) {
+      if (err) {
+        callback(err);
+        return;
+      }
+      var rounds = data.filterRounds || [];
+      var cur = currentRoundValue(data, comp);
+      var lines = [];
+      for (var i = 0; i < rounds.length && lines.length < 36; i++) {
+        var r = rounds[i];
+        var value = roundValueOf(r);
+        var name = String((r && r.name) || "");
+        if (!value || /^all$/i.test(name)) {
+          continue;
+        }
+        var label = roundLabel(name, comp);
+        lines.push([value, label, cur && value === String(cur) ? "1" : "0"].join("|"));
+      }
+      if (!lines.length) {
+        var fx = matchesOf(data);
+        var t = fx[0] ? roundLabel(fx[0].roundTitle, comp) : (isOrigin(comp) ? "Game" : "Round");
+        var rid = fx[0] ? String(fx[0].roundId || fx[0].round || "") : "";
+        lines.push([rid, t, "1"].join("|"));
+      }
+      callback(null, { title: "Draw", lines: lines });
+    });
+    return;
+  }
+
+  if (req === 11) {
+    if (!team) {
+      callback(new Error("parse"));
+      return;
+    }
+    var roundUrl = drawUrl(comp, null, year) + "&round=" + encodeURIComponent(team);
+    cachedGet(roundUrl, CACHE_DRAW, "vue-draw", function (err, data) {
+      if (err) {
+        callback(err);
+        return;
+      }
+      var fx = matchesOf(data).slice();
+      fx.sort(function (a, b) {
+        if (a.type === "Bye" && b.type !== "Bye") {
+          return 1;
+        }
+        if (a.type !== "Bye" && b.type === "Bye") {
+          return -1;
+        }
+        return kickoffMs(a) - kickoffMs(b);
+      });
+      var title = "Round";
+      var first = fx.filter(function (f) { return f.type === "Match"; })[0] || fx[0];
+      if (first) {
+        title = roundLabel(first.roundTitle, comp);
+      }
+      callback(null, {
+        title: title,
+        lines: fx.map(function (f) { return matchLine(f, comp, true); })
+      });
     });
     return;
   }

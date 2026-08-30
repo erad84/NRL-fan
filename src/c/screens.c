@@ -91,10 +91,10 @@ static int s_years[NRL_YEAR_COUNT];
 static Window *s_live_window;
 static Layer *s_live_layer;
 static char s_live_line[NRL_LINE_LEN];
-static char s_live_home[8];
-static char s_live_away[8];
-static char s_live_hs[8];
-static char s_live_as[8];
+static char s_live_home[4];
+static char s_live_away[4];
+static char s_live_hs[6];
+static char s_live_as[6];
 static char s_live_state[8];
 static Window *s_pin_window;
 static MenuLayer *s_pin_menu;
@@ -108,7 +108,7 @@ static bool s_pin_ok;
 static AppTimer *s_pin_timeout;
 static char s_pin_header[NRL_TITLE_LEN];
 static char s_pin_status[NRL_TITLE_LEN];
-static char s_pin_error[NRL_LINE_LEN];
+static char s_pin_error[20];
 
 static const Club *clubs_for_comp(int *count) {
   int comp = persist_get_comp();
@@ -211,6 +211,62 @@ static void split_line(const char *line, char out[][20], int max_parts, int *cou
   *count = n;
 }
 
+static bool parse_odds_fixed(const char *s, int *h, int *a) {
+  int hi = 0;
+  int ai = 0;
+  if (!s || *s < '0' || *s > '9') {
+    return false;
+  }
+  while (*s >= '0' && *s <= '9') {
+    hi = hi * 10 + (*s - '0');
+    s++;
+  }
+  if (*s != '-') {
+    return false;
+  }
+  s++;
+  if (*s < '0' || *s > '9') {
+    return false;
+  }
+  while (*s >= '0' && *s <= '9') {
+    ai = ai * 10 + (*s - '0');
+    s++;
+  }
+  if (*s != '\0' || hi < 101 || ai < 101) {
+    return false;
+  }
+  *h = hi;
+  *a = ai;
+  return true;
+}
+
+static bool format_odds_pair(const char *field, char *home, size_t home_len, char *away,
+                             size_t away_len) {
+  int h = 0;
+  int a = 0;
+  int hp = 0;
+  home[0] = '\0';
+  away[0] = '\0';
+  if (!parse_odds_fixed(field, &h, &a)) {
+    return false;
+  }
+  if (persist_get_odds_raw()) {
+    snprintf(home, home_len, "%d.%02d", h / 100, h % 100);
+    snprintf(away, away_len, "%d.%02d", a / 100, a % 100);
+  } else {
+    hp = (100 * a) / (h + a);
+    if (hp < 1) {
+      hp = 1;
+    }
+    if (hp > 99) {
+      hp = 99;
+    }
+    snprintf(home, home_len, "%d%%", hp);
+    snprintf(away, away_len, "%d%%", 100 - hp);
+  }
+  return true;
+}
+
 static bool line_is_header(const char *line) {
   return line && strncmp(line, "HDR|", 4) == 0;
 }
@@ -229,7 +285,7 @@ static bool line_is_pinned(const char *line) {
     return false;
   }
   split_line(line, p, 9, &n);
-  return n >= 8 && strcmp(p[7], "1") == 0;
+  return n >= 9 && strcmp(p[8], "1") == 0;
 }
 
 static bool finals_list_open(void) {
@@ -261,9 +317,9 @@ static void format_round_copy(const char *src, char *out, size_t out_len) {
 static void format_row(int req, const char *line, char *title, size_t title_len, char *sub,
                        size_t sub_len, char *bot, size_t bot_len, char *home, size_t home_len,
                        char *away, size_t away_len, bool *is_ladder) {
-  char p[8][20];
+  char p[9][20];
   int n = 0;
-  split_line(line, p, 8, &n);
+  split_line(line, p, 9, &n);
 
   title[0] = '\0';
   sub[0] = '\0';
@@ -274,6 +330,12 @@ static void format_row(int req, const char *line, char *title, size_t title_len,
 
   if (line_is_header(line)) {
     strncpy(title, line + 4, title_len - 1);
+    title[title_len - 1] = '\0';
+    return;
+  }
+
+  if (req == REQ_DRAW && n >= 2) {
+    strncpy(title, p[1], title_len - 1);
     title[title_len - 1] = '\0';
     return;
   }
@@ -300,7 +362,7 @@ static void format_row(int req, const char *line, char *title, size_t title_len,
     home[home_len - 1] = '\0';
     strncpy(away, p[3], away_len - 1);
     away[away_len - 1] = '\0';
-    if (req != REQ_HISTORY && req != REQ_STATS) {
+    if (req != REQ_HISTORY && req != REQ_STATS && req != REQ_DRAW_ROUND) {
       persist_set_round(p[0]);
     }
 
@@ -321,6 +383,31 @@ static void format_row(int req, const char *line, char *title, size_t title_len,
       } else if (p[6][0] != '\0') {
         snprintf(bot, bot_len, "%s  %s", p[5], p[6]);
       } else {
+        strncpy(bot, p[5], bot_len - 1);
+        bot[bot_len - 1] = '\0';
+      }
+      return;
+    }
+
+    if (req == REQ_DRAW_ROUND) {
+      if (strcmp(p[5], "BYE") == 0) {
+        snprintf(title, title_len, "%s  BYE", p[1]);
+        return;
+      }
+      snprintf(title, title_len, "%s  v  %s", p[1], p[3]);
+      if (p[6][0]) {
+        strncpy(sub, p[6], sub_len - 1);
+        sub[sub_len - 1] = '\0';
+      }
+      if (strcmp(p[2], "-") != 0 || strcmp(p[4], "-") != 0) {
+        snprintf(bot, bot_len, "%s-%s", p[2], p[4]);
+      } else if (strcmp(p[5], "UP") == 0 && n >= 8 && p[7][0]) {
+        char home_odds[8];
+        char away_odds[8];
+        if (format_odds_pair(p[7], home_odds, sizeof(home_odds), away_odds, sizeof(away_odds))) {
+          snprintf(bot, bot_len, "%s Odds %s", home_odds, away_odds);
+        }
+      } else if (strcmp(p[5], "LIVE") == 0 || strcmp(p[5], "HT") == 0) {
         strncpy(bot, p[5], bot_len - 1);
         bot[bot_len - 1] = '\0';
       }
@@ -411,7 +498,7 @@ static void draw_list_row(GContext *ctx, const Layer *cell_layer, ListData *list
     return;
   }
   if (list->count == 0) {
-    menu_cell_basic_draw(ctx, cell_layer, "No games", NULL, NULL);
+    menu_cell_basic_draw(ctx, cell_layer, req == REQ_DRAW ? "No rounds" : "No games", NULL, NULL);
     return;
   }
 
@@ -443,7 +530,7 @@ static void draw_list_row(GContext *ctx, const Layer *cell_layer, ListData *list
   GBitmap *away_bmp = is_ladder ? NULL : logo_for_code(away);
   const int icon = bounds.size.h - (LOGO_GAP * 2);
   const int pad = ROW_PAD;
-  const bool disclose = (req == REQ_UPCOMING);
+  const bool disclose = (req == REQ_UPCOMING || req == REQ_DRAW);
   const bool pinned = disclose && line_is_pinned(list->lines[row]);
   int left = bounds.origin.x + pad;
   int right = bounds.origin.x + bounds.size.w - pad;
@@ -464,11 +551,14 @@ static void draw_list_row(GContext *ctx, const Layer *cell_layer, ListData *list
   const GTextAlignment align = (home_bmp && away_bmp) ? GTextAlignmentCenter : GTextAlignmentLeft;
   const GFont title_font = fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD);
   const GFont sub_font = fonts_get_system_font(FONT_KEY_GOTHIC_14);
+  const GFont mid_font = (req == REQ_DRAW_ROUND)
+      ? fonts_get_system_font(FONT_KEY_GOTHIC_18)
+      : title_font;
   if (bot[0]) {
     graphics_draw_text(ctx, title, title_font,
                        GRect(text_box.origin.x, text_box.origin.y - 2, text_box.size.w, 22),
                        GTextOverflowModeTrailingEllipsis, align, NULL);
-    graphics_draw_text(ctx, sub, title_font,
+    graphics_draw_text(ctx, sub, mid_font,
                        GRect(text_box.origin.x, text_box.origin.y + 16, text_box.size.w, 22),
                        GTextOverflowModeTrailingEllipsis, align, NULL);
     graphics_draw_text(ctx, bot, sub_font,
@@ -527,6 +617,9 @@ static int16_t list_cell_height(MenuLayer *layer, MenuIndex *index, void *contex
       line_is_header(s_list.lines[index->row])) {
     return 28;
   }
+  if (s_list_req == REQ_DRAW) {
+    return 44;
+  }
   return LIST_CELL_HEIGHT;
 }
 
@@ -550,6 +643,7 @@ static void list_draw_header(GContext *ctx, const Layer *cell_layer, uint16_t se
 }
 
 static void screens_show_stats(const char *code);
+static void screens_show_draw_round(const char *value, const char *label);
 
 static void screens_show_live_game(uint16_t row);
 static void live_game_refresh(void);
@@ -564,6 +658,15 @@ static void list_select(MenuLayer *layer, MenuIndex *index, void *context) {
   }
   if (s_list_req == REQ_LIVE && s_list.status == STATUS_OK && s_list.count > 0) {
     screens_show_live_game(index->row);
+    return;
+  }
+  if (s_list_req == REQ_DRAW && s_list.status == STATUS_OK && s_list.count > 0) {
+    char p[8][20];
+    int n = 0;
+    split_line(s_list.lines[index->row], p, 8, &n);
+    if (n >= 2 && p[0][0]) {
+      screens_show_draw_round(p[0], p[1]);
+    }
     return;
   }
   if (s_list_req == REQ_UPCOMING && s_list.status == STATUS_OK && s_list.count > 0) {
@@ -634,6 +737,9 @@ static int16_t detail_cell_height(MenuLayer *layer, MenuIndex *index, void *cont
   (void)layer;
   (void)index;
   (void)context;
+  if (s_detail.pending_req == REQ_DRAW_ROUND) {
+    return LIST_CELL_HEIGHT;
+  }
   if (s_detail.status != STATUS_OK || s_detail.count == 0) {
     return LIST_CELL_HEIGHT;
   }
@@ -642,6 +748,10 @@ static int16_t detail_cell_height(MenuLayer *layer, MenuIndex *index, void *cont
 
 static void detail_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *index, void *context) {
   (void)context;
+  if (s_detail.pending_req == REQ_DRAW_ROUND) {
+    draw_list_row(ctx, cell_layer, &s_detail, REQ_DRAW_ROUND, index->row);
+    return;
+  }
   if (s_detail.status != STATUS_OK || s_detail.count == 0) {
     draw_list_row(ctx, cell_layer, &s_detail, REQ_STATS, index->row);
     return;
@@ -682,6 +792,9 @@ static void detail_select(MenuLayer *layer, MenuIndex *index, void *context) {
   (void)layer;
   (void)index;
   (void)context;
+  if (s_detail.pending_req == REQ_DRAW_ROUND) {
+    return;
+  }
   s_detail.status = STATUS_LOADING;
   s_detail.count = 0;
   menu_layer_reload_data(s_detail_menu);
@@ -727,6 +840,23 @@ static void screens_show_stats(const char *code) {
     menu_layer_reload_data(s_detail_menu);
   }
   comm_request_ex(REQ_STATS, persist_get_comp(), 0, s_req_team);
+}
+
+static void screens_show_draw_round(const char *value, const char *label) {
+  snprintf(s_detail_name, sizeof(s_detail_name), "%s", label && label[0] ? label : "Round");
+  strncpy(s_req_team, value, sizeof(s_req_team) - 1);
+  s_req_team[sizeof(s_req_team) - 1] = '\0';
+  s_detail.pending_req = REQ_DRAW_ROUND;
+  s_detail.status = STATUS_LOADING;
+  s_detail.count = 0;
+  s_detail.title[0] = '\0';
+  s_detail.error[0] = '\0';
+  if (!window_stack_contains_window(s_detail_window)) {
+    window_stack_push(s_detail_window, true);
+  } else if (s_detail_menu) {
+    menu_layer_reload_data(s_detail_menu);
+  }
+  comm_request_ex(REQ_DRAW_ROUND, persist_get_comp(), 0, s_req_team);
 }
 
 static uint16_t year_num_rows(MenuLayer *layer, uint16_t section, void *context) {
@@ -1026,9 +1156,9 @@ static void live_game_refresh(void) {
 
 static void live_layer_update(Layer *layer, GContext *ctx) {
   GRect bounds = layer_get_bounds(layer);
-  char p[8][20];
+  char p[9][20];
   int n = 0;
-  split_line(s_live_line, p, 8, &n);
+  split_line(s_live_line, p, 9, &n);
 #if defined(PBL_COLOR)
   graphics_context_set_fill_color(ctx, GColorBlack);
   graphics_fill_rect(ctx, bounds, 0, GCornerNone);
@@ -1115,6 +1245,26 @@ static void live_layer_update(Layer *layer, GContext *ctx) {
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
   }
 
+  char home_pct[8];
+  char away_pct[8];
+  home_pct[0] = '\0';
+  away_pct[0] = '\0';
+  if (n >= 8 && p[7][0]) {
+    format_odds_pair(p[7], home_pct, sizeof(home_pct), away_pct, sizeof(away_pct));
+  }
+  const int chance_y = clock_y + (status ? 40 : 20);
+  if (home_pct[0]) {
+    graphics_draw_text(ctx, home_pct, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
+                       GRect(inset, chance_y, 36, 20),
+                       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    graphics_draw_text(ctx, "Odds", fonts_get_system_font(FONT_KEY_GOTHIC_14),
+                       GRect(inset + 34, chance_y, bounds.size.w - inset * 2 - 68, 20),
+                       GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+    graphics_draw_text(ctx, away_pct, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
+                       GRect(bounds.size.w - inset - 36, chance_y, 36, 20),
+                       GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+  }
+
   const char *vibe = persist_get_vibe() ? "Goal vibe ON" : "Goal vibe OFF";
 #if defined(PBL_COLOR)
   graphics_context_set_text_color(ctx, GColorWhite);
@@ -1124,7 +1274,7 @@ static void live_layer_update(Layer *layer, GContext *ctx) {
   const int vibe_h = 20;
   const int vibe_w = bounds.size.w / 2;
   int vibe_y = bounds.origin.y + (bounds.size.h * 3) / 4 - vibe_h / 2;
-  const int below_status = clock_y + (status ? 44 : 24);
+  const int below_status = clock_y + (status ? 44 : 24) + (home_pct[0] ? 20 : 0);
   if (vibe_y < below_status) {
     vibe_y = below_status;
   }
@@ -1568,6 +1718,38 @@ static void append_chunk_lines(ListData *list, const char *chunk) {
   }
 }
 
+static void draw_highlight_current(void) {
+  if (!s_list_menu || s_list_req != REQ_DRAW || s_list.status != STATUS_OK || s_list.count == 0) {
+    return;
+  }
+  int current = -1;
+  const char *round = persist_get_round();
+  for (int i = 0; i < s_list.count; i++) {
+    char p[8][20];
+    int n = 0;
+    split_line(s_list.lines[i], p, 8, &n);
+    if (n >= 3 && strcmp(p[2], "1") == 0) {
+      current = i;
+      break;
+    }
+  }
+  if (current < 0 && round && round[0]) {
+    for (int i = 0; i < s_list.count; i++) {
+      char p[8][20];
+      int n = 0;
+      split_line(s_list.lines[i], p, 8, &n);
+      if (n >= 2 && strcmp(p[1], round) == 0) {
+        current = i;
+        break;
+      }
+    }
+  }
+  if (current >= 0) {
+    menu_layer_set_selected_index(s_list_menu, (MenuIndex){ .section = 0, .row = (uint16_t)current },
+                                 MenuRowAlignCenter, false);
+  }
+}
+
 static void apply_payload(ListData *list, MenuLayer *menu, DictionaryIterator *iter) {
   Tuple *status_t = dict_find(iter, MESSAGE_KEY_STATUS);
   if (status_t && status_t->value->int32 == STATUS_ERROR) {
@@ -1618,7 +1800,8 @@ void screens_handle_payload(DictionaryIterator *iter) {
     pin_handle_result(iter);
     return;
   }
-  if (req == s_detail.pending_req && s_detail.pending_req == REQ_STATS &&
+  if (req == s_detail.pending_req &&
+      (s_detail.pending_req == REQ_STATS || s_detail.pending_req == REQ_DRAW_ROUND) &&
       window_stack_contains_window(s_detail_window)) {
     apply_payload(&s_detail, s_detail_menu, iter);
     return;
@@ -1629,6 +1812,9 @@ void screens_handle_payload(DictionaryIterator *iter) {
   apply_payload(&s_list, s_list_menu, iter);
   if (req == REQ_LIVE) {
     live_game_refresh();
+  }
+  if (req == REQ_DRAW && s_list.status == STATUS_OK) {
+    draw_highlight_current();
   }
 }
 
@@ -1657,5 +1843,17 @@ void screens_handle_send_failed(void) {
   strncpy(s_list.error, "Phone offline", sizeof(s_list.error) - 1);
   if (s_list_menu) {
     menu_layer_reload_data(s_list_menu);
+  }
+}
+
+void screens_settings_changed(void) {
+  if (s_list_menu && window_stack_contains_window(s_list_window)) {
+    menu_layer_reload_data(s_list_menu);
+  }
+  if (s_detail_menu && window_stack_contains_window(s_detail_window)) {
+    menu_layer_reload_data(s_detail_menu);
+  }
+  if (s_live_layer && window_stack_contains_window(s_live_window)) {
+    layer_mark_dirty(s_live_layer);
   }
 }

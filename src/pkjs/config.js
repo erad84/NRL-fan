@@ -97,6 +97,25 @@ module.exports = [
     items: [
       {
         type: "heading",
+        defaultValue: "Odds"
+      },
+      {
+        type: "text",
+        defaultValue: "Off shows win chance %. On shows NRL decimal odds (e.g. 1.51)."
+      },
+      {
+        type: "toggle",
+        messageKey: "ODDS_RAW",
+        label: "Odds type",
+        defaultValue: false
+      }
+    ]
+  },
+  {
+    type: "section",
+    items: [
+      {
+        type: "heading",
         defaultValue: "Timeline"
       },
       {

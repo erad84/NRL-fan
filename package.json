@@ -1,7 +1,7 @@
 {
   "name": "nrl-watch",
   "author": "Mark",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "repository": {
     "type": "git",
     "url": "https://github.com/erad84/NRL-fan.git"
@@ -53,7 +53,8 @@
       "TEAM",
       "ROW",
       "PIN_ALL",
-      "PIN_REMINDER"
+      "PIN_REMINDER",
+      "ODDS_RAW"
     ],
     "resources": {
       "media": [

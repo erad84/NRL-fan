@@ -7,6 +7,7 @@
 #define PERSIST_FAV_NRLW 4
 #define PERSIST_FAV_ORIGIN 5
 #define PERSIST_VIBE 6
+#define PERSIST_ODDS_RAW 7
 
 #if defined(PBL_PLATFORM_GABBRO)
 #define MAIN_HEADER_HEIGHT 210
@@ -31,6 +32,7 @@ static char s_fav_nrl[NRL_TEAM_LEN] = "Broncos";
 static char s_fav_nrlw[NRL_TEAM_LEN] = "Broncos";
 static char s_fav_origin[NRL_TEAM_LEN] = "NSW";
 static bool s_vibe = true;
+static bool s_odds_raw = false;
 static Window *s_main_window;
 static MenuLayer *s_main_menu;
 static char s_upcoming_title[NRL_NAME_LEN];
@@ -118,6 +120,9 @@ void persist_load(void) {
   if (persist_exists(PERSIST_VIBE)) {
     s_vibe = persist_read_int(PERSIST_VIBE) != 0;
   }
+  if (persist_exists(PERSIST_ODDS_RAW)) {
+    s_odds_raw = persist_read_int(PERSIST_ODDS_RAW) != 0;
+  }
 }
 
 const char *persist_get_round(void) {
@@ -192,6 +197,15 @@ void persist_set_vibe(bool on) {
   persist_write_int(PERSIST_VIBE, on ? 1 : 0);
 }
 
+bool persist_get_odds_raw(void) {
+  return s_odds_raw;
+}
+
+void persist_set_odds_raw(bool on) {
+  s_odds_raw = on;
+  persist_write_int(PERSIST_ODDS_RAW, on ? 1 : 0);
+}
+
 const char *comp_label(int comp) {
   switch (comp) {
     case COMP_NRLW: return "NRLW";
@@ -229,7 +243,7 @@ static uint16_t main_num_rows(MenuLayer *layer, uint16_t section, void *context)
   (void)layer;
   (void)section;
   (void)context;
-  return 7;
+  return 8;
 }
 
 static int16_t main_cell_height(MenuLayer *layer, MenuIndex *index, void *context) {
@@ -307,9 +321,10 @@ static void main_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *ind
       break;
     case 2: title = origin ? "Series" : "Ladder"; break;
     case 3: title = "Live"; break;
-    case 4: title = "My Team Results"; break;
-    case 5: title = "History"; break;
-    case 6:
+    case 4: title = "Draw"; break;
+    case 5: title = "My Team Results"; break;
+    case 6: title = "History"; break;
+    case 7:
       title = "Competition";
       subtitle = comp_label(s_comp);
       break;
@@ -332,9 +347,10 @@ static void main_select(MenuLayer *layer, MenuIndex *index, void *context) {
       screens_show_list(is_origin_comp() ? "Series" : "Ladder", REQ_LADDER);
       break;
     case 3: screens_show_list("Live", REQ_LIVE); break;
-    case 4: screens_show_list("My Team Results", REQ_RESULTS); break;
-    case 5: screens_show_history(); break;
-    case 6: screens_show_comp_menu(); break;
+    case 4: screens_show_list("Draw", REQ_DRAW); break;
+    case 5: screens_show_list("My Team Results", REQ_RESULTS); break;
+    case 6: screens_show_history(); break;
+    case 7: screens_show_comp_menu(); break;
   }
 }
 
