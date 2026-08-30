@@ -95,6 +95,7 @@ static char s_live_home[8];
 static char s_live_away[8];
 static char s_live_hs[8];
 static char s_live_as[8];
+static char s_live_state[8];
 static Window *s_pin_window;
 static MenuLayer *s_pin_menu;
 static ActionBarLayer *s_pin_bar;
@@ -393,7 +394,8 @@ static void live_tick(void *data) {
 static void start_live_timer(void) {
   cancel_live_timer();
   if (s_list_req == REQ_LIVE) {
-    s_live_timer = app_timer_register(60000, live_tick, NULL);
+    const bool watching = s_live_window && window_stack_contains_window(s_live_window);
+    s_live_timer = app_timer_register(watching ? 30000 : 60000, live_tick, NULL);
   }
 }
 
@@ -957,14 +959,25 @@ static void parse_match_codes(const char *line, char *home, char *away, char *hs
 }
 
 static void live_game_apply_line(const char *line, bool vibrate) {
+  char p[8][20];
+  int n = 0;
   char home[8];
   char away[8];
   char hs[8];
   char as[8];
+  split_line(line, p, 8, &n);
   parse_match_codes(line, home, away, hs, as);
-  if (vibrate && persist_get_vibe() &&
-      ((hs[0] && strcmp(hs, s_live_hs) != 0) || (as[0] && strcmp(as, s_live_as) != 0))) {
-    vibes_short_pulse();
+  const char *state = (n >= 6) ? p[5] : "";
+  if (vibrate && persist_get_vibe()) {
+    const bool score_changed =
+        (hs[0] && strcmp(hs, s_live_hs) != 0) || (as[0] && strcmp(as, s_live_as) != 0);
+    const bool started = strcmp(s_live_state, "UP") == 0 &&
+                         (strcmp(state, "LIVE") == 0 || strcmp(state, "HT") == 0);
+    const bool fulltime = strcmp(state, "FT") == 0 && strcmp(s_live_state, "FT") != 0 &&
+                          s_live_state[0] != '\0';
+    if (score_changed || started || fulltime) {
+      vibes_short_pulse();
+    }
   }
   strncpy(s_live_line, line, sizeof(s_live_line) - 1);
   s_live_line[sizeof(s_live_line) - 1] = '\0';
@@ -972,6 +985,8 @@ static void live_game_apply_line(const char *line, bool vibrate) {
   strncpy(s_live_away, away, sizeof(s_live_away) - 1);
   strncpy(s_live_hs, hs, sizeof(s_live_hs) - 1);
   strncpy(s_live_as, as, sizeof(s_live_as) - 1);
+  strncpy(s_live_state, state, sizeof(s_live_state) - 1);
+  s_live_state[sizeof(s_live_state) - 1] = '\0';
   if (s_live_layer) {
     layer_mark_dirty(s_live_layer);
   }
@@ -990,6 +1005,21 @@ static void live_game_refresh(void) {
     if (strcmp(home, s_live_home) == 0 && strcmp(away, s_live_away) == 0) {
       live_game_apply_line(s_list.lines[i], true);
       return;
+    }
+  }
+  /* Keep the card open. If this match dropped off a finished round list, show FT. */
+  if (s_list.status != STATUS_OK || s_list.count == 0) {
+    return;
+  }
+  if (strcmp(s_live_state, "LIVE") == 0 || strcmp(s_live_state, "HT") == 0) {
+    char p[8][20];
+    int n = 0;
+    char line[NRL_LINE_LEN];
+    split_line(s_live_line, p, 8, &n);
+    if (n >= 6) {
+      snprintf(line, sizeof(line), "%s|%s|%s|%s|%s|FT|%s", p[0], p[1], p[2], p[3], p[4],
+               n >= 7 ? p[6] : "");
+      live_game_apply_line(line, true);
     }
   }
 }
@@ -1059,19 +1089,31 @@ static void live_layer_update(Layer *layer, GContext *ctx) {
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
 
   char clock[32];
-  if (n >= 6 && strcmp(p[5], "UP") == 0) {
+  clock[0] = '\0';
+  if (n >= 7) {
     snprintf(clock, sizeof(clock), "%s", p[6]);
-  } else if (n >= 7 && p[6][0]) {
-    snprintf(clock, sizeof(clock), "%s  %s", p[5], p[6]);
-  } else if (n >= 6) {
-    snprintf(clock, sizeof(clock), "%s", p[5]);
-  } else {
-    clock[0] = '\0';
+  }
+  const char *status = NULL;
+  if (n >= 6) {
+    if (strcmp(p[5], "UP") == 0) {
+      status = "Upcoming";
+    } else if (strcmp(p[5], "HT") == 0) {
+      status = "Half Time";
+    } else if (strcmp(p[5], "FT") == 0) {
+      status = "Full Time";
+    } else if (strcmp(p[5], "BYE") != 0) {
+      status = "Live";
+    }
   }
   const int clock_y = y_logo + logo + 52;
   graphics_draw_text(ctx, clock, fonts_get_system_font(FONT_KEY_GOTHIC_18),
                      GRect(inset, clock_y, bounds.size.w - inset * 2, 22),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+  if (status) {
+    graphics_draw_text(ctx, status, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+                       GRect(inset, clock_y + 20, bounds.size.w - inset * 2, 22),
+                       GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+  }
 
   const char *vibe = persist_get_vibe() ? "Goal vibe ON" : "Goal vibe OFF";
 #if defined(PBL_COLOR)
@@ -1082,8 +1124,12 @@ static void live_layer_update(Layer *layer, GContext *ctx) {
   const int vibe_h = 20;
   const int vibe_w = bounds.size.w / 2;
   int vibe_y = bounds.origin.y + (bounds.size.h * 3) / 4 - vibe_h / 2;
-  if (vibe_y < clock_y + 24) {
-    vibe_y = clock_y + 24;
+  const int below_status = clock_y + (status ? 44 : 24);
+  if (vibe_y < below_status) {
+    vibe_y = below_status;
+  }
+  if (vibe_y + vibe_h > bounds.origin.y + bounds.size.h - 2) {
+    vibe_y = bounds.origin.y + bounds.size.h - vibe_h - 2;
   }
   graphics_draw_text(ctx, vibe, fonts_get_system_font(FONT_KEY_GOTHIC_14_BOLD),
                      GRect(bounds.size.w - inset - vibe_w, vibe_y, vibe_w, vibe_h),
@@ -1141,6 +1187,7 @@ static void screens_show_live_game(uint16_t row) {
   } else if (s_live_layer) {
     layer_mark_dirty(s_live_layer);
   }
+  comm_request(REQ_LIVE, persist_get_comp());
   start_live_timer();
 }
 

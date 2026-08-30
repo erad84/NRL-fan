@@ -354,7 +354,7 @@ function formatKickoff(iso) {
   if (hour === 0) {
     hour = 12;
   }
-  var ap = h >= 12 ? "p" : "a";
+  var ap = h >= 12 ? "pm" : "am";
   return days[d.getDay()] + " " + d.getDate() + " " + months[d.getMonth()] + " " + hour + ":" + mm + ap;
 }
 
@@ -362,9 +362,6 @@ function liveExtra(f) {
   var clock = f.clock || {};
   var game = clock.gameTime || "";
   var mins = game.split(":")[0];
-  if (f.matchState === "HalfTime") {
-    return "HT";
-  }
   if (mins) {
     return mins + "'";
   }
@@ -382,8 +379,8 @@ function matchLine(f, comp) {
   var state = "UP";
   var extra = formatKickoff((f.clock || {}).kickOffTimeLong);
   if (isLive(f)) {
-    state = "LIVE";
-    extra = liveExtra(f);
+    state = f.matchState === "HalfTime" ? "HT" : "LIVE";
+    extra = liveExtra(f) || extra;
   } else if (isComplete(f)) {
     state = "FT";
   }
