@@ -20,6 +20,10 @@
 #define LOGO_GAP 2
 #define DISCLOSE_W 10
 #define PIN_TIMEOUT_MS 20000
+#if !defined(PBL_PLATFORM_APLITE)
+#define SCROLL_TICK_MS 120
+#define SCROLL_PAUSE_TICKS 15
+#endif
 
 typedef struct {
   const char *code;
@@ -77,10 +81,19 @@ static MenuLayer *s_team_menu;
 static Window *s_comp_window;
 static MenuLayer *s_comp_menu;
 static AppTimer *s_live_timer;
+#if !defined(PBL_PLATFORM_APLITE)
+static AppTimer *s_scroll_timer;
+static int s_scroll_offset;
+static int s_scroll_max;
+static uint16_t s_scroll_row;
+static bool s_scroll_forward;
+static uint8_t s_scroll_pause;
+#endif
 static ListData s_list;
 static ListData s_detail;
 static char s_list_name[NRL_NAME_LEN];
 static char s_detail_name[NRL_NAME_LEN];
+static bool s_draw_round_is_current;
 static char s_hist_title[NRL_NAME_LEN];
 static int s_list_req;
 static int s_req_year;
@@ -467,6 +480,109 @@ static void cancel_live_timer(void) {
   }
 }
 
+#if !defined(PBL_PLATFORM_APLITE)
+static void scroll_stop_timer(void) {
+  if (s_scroll_timer) {
+    app_timer_cancel(s_scroll_timer);
+    s_scroll_timer = NULL;
+  }
+}
+
+static void scroll_cancel(void) {
+  scroll_stop_timer();
+  s_scroll_offset = 0;
+  s_scroll_max = 0;
+  s_scroll_pause = 0;
+}
+
+static void scroll_schedule(void);
+
+static void scroll_tick(void *data) {
+  (void)data;
+  s_scroll_timer = NULL;
+  if (s_scroll_max <= 0 || !s_detail_menu) {
+    return;
+  }
+  if (s_scroll_pause > 0) {
+    s_scroll_pause--;
+    scroll_schedule();
+    return;
+  }
+  if (s_scroll_forward) {
+    if (s_scroll_offset < s_scroll_max) {
+      s_scroll_offset++;
+    }
+    if (s_scroll_offset >= s_scroll_max) {
+      s_scroll_forward = false;
+      s_scroll_pause = SCROLL_PAUSE_TICKS;
+    }
+  } else {
+    if (s_scroll_offset > 0) {
+      s_scroll_offset--;
+    }
+    if (s_scroll_offset <= 0) {
+      s_scroll_forward = true;
+      s_scroll_pause = SCROLL_PAUSE_TICKS;
+    }
+  }
+  layer_mark_dirty(menu_layer_get_layer(s_detail_menu));
+  scroll_schedule();
+}
+
+static void scroll_schedule(void) {
+  scroll_stop_timer();
+  if (s_scroll_max > 0 && s_detail_menu &&
+      window_stack_contains_window(s_detail_window) &&
+      s_detail.pending_req == REQ_DRAW_ROUND) {
+    s_scroll_timer = app_timer_register(SCROLL_TICK_MS, scroll_tick, NULL);
+  }
+}
+
+static void scroll_reset_row(uint16_t row) {
+  scroll_cancel();
+  s_scroll_row = row;
+  s_scroll_forward = true;
+}
+
+static int text_width_px(const char *text, GFont font) {
+  if (!text || !text[0]) {
+    return 0;
+  }
+  GSize size = graphics_text_layout_get_content_size(
+      text, font, GRect(0, 0, 512, 24),
+      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
+  return size.w;
+}
+
+static void draw_mid_row(GContext *ctx, const char *text, GFont font, GRect text_box,
+                         int y, int h, bool scroll, int overflow) {
+  if (scroll && overflow > 0) {
+    graphics_draw_text(ctx, text, font,
+                       GRect(text_box.origin.x - s_scroll_offset, y,
+                             text_width_px(text, font) + 4, h),
+                       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    if (!s_scroll_timer) {
+      scroll_schedule();
+    }
+    return;
+  }
+  graphics_draw_text(ctx, text, font, GRect(text_box.origin.x, y, text_box.size.w, h),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+}
+#else
+static void scroll_cancel(void) {}
+static void scroll_reset_row(uint16_t row) { (void)row; }
+static void scroll_stop_timer(void) {}
+
+static void draw_mid_row(GContext *ctx, const char *text, GFont font, GRect text_box,
+                         int y, int h, bool scroll, int overflow) {
+  (void)scroll;
+  (void)overflow;
+  graphics_draw_text(ctx, text, font, GRect(text_box.origin.x, y, text_box.size.w, h),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+}
+#endif
+
 static void live_tick(void *data) {
   (void)data;
   s_live_timer = NULL;
@@ -530,21 +646,26 @@ static void draw_list_row(GContext *ctx, const Layer *cell_layer, ListData *list
   GBitmap *away_bmp = is_ladder ? NULL : logo_for_code(away);
   const int icon = bounds.size.h - (LOGO_GAP * 2);
   const int pad = ROW_PAD;
-  const bool disclose = (req == REQ_UPCOMING || req == REQ_DRAW);
+  char draw_p[8][20];
+  int draw_n = 0;
+  if (req == REQ_DRAW) {
+    split_line(list->lines[row], draw_p, 8, &draw_n);
+  }
+  const bool disclose = (req == REQ_DRAW_ROUND && s_draw_round_is_current) ||
+      (req == REQ_DRAW && draw_n >= 3 && strcmp(draw_p[2], "1") == 0);
   const bool pinned = disclose && line_is_pinned(list->lines[row]);
   int left = bounds.origin.x + pad;
   int right = bounds.origin.x + bounds.size.w - pad;
   if (disclose) {
     right -= DISCLOSE_W;
   }
+  const int logo_left = left;
+  const int logo_right = away_bmp ? (right - icon) : right;
   if (home_bmp) {
-    draw_logo(ctx, home_bmp, GRect(left, bounds.origin.y + LOGO_GAP, icon, icon), highlight);
     left += icon + 2;
   }
   if (away_bmp) {
-    right -= icon;
-    draw_logo(ctx, away_bmp, GRect(right, bounds.origin.y + LOGO_GAP, icon, icon), highlight);
-    right -= 2;
+    right -= icon + 2;
   }
 
   GRect text_box = GRect(left, bounds.origin.y, right - left, bounds.size.h);
@@ -554,13 +675,36 @@ static void draw_list_row(GContext *ctx, const Layer *cell_layer, ListData *list
   const GFont mid_font = (req == REQ_DRAW_ROUND)
       ? fonts_get_system_font(FONT_KEY_GOTHIC_18)
       : title_font;
+  const bool scroll_mid =
+#if !defined(PBL_PLATFORM_APLITE)
+      highlight && req == REQ_DRAW_ROUND && bot[0] && sub[0] && row == s_scroll_row;
+  int mid_overflow = 0;
+  if (scroll_mid) {
+    const int sub_w = text_width_px(sub, mid_font);
+    if (sub_w > text_box.size.w) {
+      mid_overflow = sub_w - text_box.size.w;
+      if (s_scroll_max != mid_overflow) {
+        s_scroll_max = mid_overflow;
+        s_scroll_offset = 0;
+        s_scroll_forward = true;
+        s_scroll_pause = SCROLL_PAUSE_TICKS;
+        scroll_stop_timer();
+      }
+    } else if (s_scroll_max > 0) {
+      scroll_cancel();
+      s_scroll_row = row;
+    }
+  }
+#else
+      false;
+  const int mid_overflow = 0;
+#endif
   if (bot[0]) {
     graphics_draw_text(ctx, title, title_font,
                        GRect(text_box.origin.x, text_box.origin.y - 2, text_box.size.w, 22),
                        GTextOverflowModeTrailingEllipsis, align, NULL);
-    graphics_draw_text(ctx, sub, mid_font,
-                       GRect(text_box.origin.x, text_box.origin.y + 16, text_box.size.w, 22),
-                       GTextOverflowModeTrailingEllipsis, align, NULL);
+    draw_mid_row(ctx, sub, mid_font, text_box, text_box.origin.y + 16, 22,
+                 scroll_mid, mid_overflow);
     graphics_draw_text(ctx, bot, sub_font,
                        GRect(text_box.origin.x, text_box.origin.y + 36, text_box.size.w, 16),
                        GTextOverflowModeTrailingEllipsis, align, NULL);
@@ -574,6 +718,15 @@ static void draw_list_row(GContext *ctx, const Layer *cell_layer, ListData *list
   } else {
     graphics_draw_text(ctx, title, title_font, text_box,
                        GTextOverflowModeTrailingEllipsis, align, NULL);
+  }
+
+  if (home_bmp) {
+    draw_logo(ctx, home_bmp, GRect(logo_left, bounds.origin.y + LOGO_GAP, icon, icon),
+              highlight);
+  }
+  if (away_bmp) {
+    draw_logo(ctx, away_bmp, GRect(logo_right, bounds.origin.y + LOGO_GAP, icon, icon),
+              highlight);
   }
 
   if (disclose) {
@@ -643,11 +796,10 @@ static void list_draw_header(GContext *ctx, const Layer *cell_layer, uint16_t se
 }
 
 static void screens_show_stats(const char *code);
-static void screens_show_draw_round(const char *value, const char *label);
+static void screens_show_draw_round(const char *value, const char *label, bool is_current);
+static void screens_show_pin_draw_round(uint16_t row);
 
 static void screens_show_live_game(uint16_t row);
-static void live_game_refresh(void);
-static void screens_show_pin_actions(uint16_t row);
 
 static void list_select(MenuLayer *layer, MenuIndex *index, void *context) {
   (void)layer;
@@ -665,12 +817,8 @@ static void list_select(MenuLayer *layer, MenuIndex *index, void *context) {
     int n = 0;
     split_line(s_list.lines[index->row], p, 8, &n);
     if (n >= 2 && p[0][0]) {
-      screens_show_draw_round(p[0], p[1]);
+      screens_show_draw_round(p[0], p[1], n >= 3 && strcmp(p[2], "1") == 0);
     }
-    return;
-  }
-  if (s_list_req == REQ_UPCOMING && s_list.status == STATUS_OK && s_list.count > 0) {
-    screens_show_pin_actions(index->row);
     return;
   }
   if (s_list_req == REQ_LADDER && s_list.status == STATUS_OK && s_list.count > 0) {
@@ -788,11 +936,31 @@ static void detail_draw_header(GContext *ctx, const Layer *cell_layer, uint16_t 
   menu_cell_basic_header_draw(ctx, cell_layer, header);
 }
 
+#if !defined(PBL_PLATFORM_APLITE)
+static void detail_selection_changed(MenuLayer *layer, MenuIndex new_selection,
+                                     MenuIndex old_selection, void *context) {
+  (void)layer;
+  (void)old_selection;
+  (void)context;
+  if (s_detail.pending_req != REQ_DRAW_ROUND) {
+    return;
+  }
+  scroll_reset_row(new_selection.row);
+  if (s_detail_menu) {
+    layer_mark_dirty(menu_layer_get_layer(s_detail_menu));
+  }
+}
+#endif
+
 static void detail_select(MenuLayer *layer, MenuIndex *index, void *context) {
   (void)layer;
-  (void)index;
   (void)context;
   if (s_detail.pending_req == REQ_DRAW_ROUND) {
+    if (s_detail.status == STATUS_OK && s_draw_round_is_current && index->row < s_detail.count &&
+        !line_is_header(s_detail.lines[index->row]) &&
+        !line_is_bye(s_detail.lines[index->row])) {
+      screens_show_pin_draw_round(index->row);
+    }
     return;
   }
   s_detail.status = STATUS_LOADING;
@@ -812,6 +980,9 @@ static void detail_load(Window *window) {
     .get_header_height = list_header_height,
     .draw_header = detail_draw_header,
     .select_click = detail_select,
+#if !defined(PBL_PLATFORM_APLITE)
+    .selection_changed = detail_selection_changed,
+#endif
   });
   menu_layer_set_click_config_onto_window(s_detail_menu, window);
   style_menu(s_detail_menu, window);
@@ -820,6 +991,7 @@ static void detail_load(Window *window) {
 
 static void detail_unload(Window *window) {
   (void)window;
+  scroll_cancel();
   menu_layer_destroy(s_detail_menu);
   s_detail_menu = NULL;
 }
@@ -842,15 +1014,17 @@ static void screens_show_stats(const char *code) {
   comm_request_ex(REQ_STATS, persist_get_comp(), 0, s_req_team);
 }
 
-static void screens_show_draw_round(const char *value, const char *label) {
+static void screens_show_draw_round(const char *value, const char *label, bool is_current) {
   snprintf(s_detail_name, sizeof(s_detail_name), "%s", label && label[0] ? label : "Round");
   strncpy(s_req_team, value, sizeof(s_req_team) - 1);
   s_req_team[sizeof(s_req_team) - 1] = '\0';
+  s_draw_round_is_current = is_current;
   s_detail.pending_req = REQ_DRAW_ROUND;
   s_detail.status = STATUS_LOADING;
   s_detail.count = 0;
   s_detail.title[0] = '\0';
   s_detail.error[0] = '\0';
+  scroll_reset_row(0);
   if (!window_stack_contains_window(s_detail_window)) {
     window_stack_push(s_detail_window, true);
   } else if (s_detail_menu) {
@@ -1345,13 +1519,7 @@ static uint16_t pin_num_rows(MenuLayer *layer, uint16_t section, void *context) 
   (void)layer;
   (void)section;
   (void)context;
-  if (s_pin_waiting || s_pin_done) {
-    return 1;
-  }
-  if (s_pin_is_bye) {
-    return 1;
-  }
-  return 2;
+  return 1;
 }
 
 static int16_t pin_cell_height(MenuLayer *layer, MenuIndex *index, void *context) {
@@ -1378,10 +1546,8 @@ static void pin_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *inde
     text = s_pin_ok
       ? (s_pin_status[0] ? s_pin_status : "Pinned")
       : (s_pin_error[0] ? s_pin_error : "Pin failed");
-  } else if (s_pin_is_bye || index->row == 1) {
-    text = "Add rest of season?";
   } else {
-    text = "Add this game?";
+    text = "Add to Timeline?";
   }
   graphics_draw_text(ctx, text, fonts_get_system_font(FONT_KEY_GOTHIC_18),
                      GRect(bounds.origin.x + ROW_PAD, bounds.origin.y + 4,
@@ -1430,7 +1596,7 @@ static void pin_select_click(ClickRecognizerRef recognizer, void *context) {
     return;
   }
   MenuIndex idx = menu_layer_get_selected_index(s_pin_menu);
-  const bool remaining = s_pin_is_bye || idx.row == 1;
+  (void)idx;
   s_pin_waiting = true;
   s_pin_done = false;
   s_pin_ok = false;
@@ -1439,7 +1605,7 @@ static void pin_select_click(ClickRecognizerRef recognizer, void *context) {
   menu_layer_reload_data(s_pin_menu);
   pin_cancel_timeout();
   s_pin_timeout = app_timer_register(PIN_TIMEOUT_MS, pin_on_timeout, NULL);
-  comm_request_pin((int)s_pin_row, remaining);
+  comm_request_pin_draw(s_req_team, (int)s_pin_row);
 }
 
 static void pin_menu_select(MenuLayer *layer, MenuIndex *index, void *context) {
@@ -1497,16 +1663,15 @@ static void pin_handle_result(DictionaryIterator *iter) {
   if (s_pin_ok) {
     vibes_short_pulse();
     window_stack_pop(true);
-    if (s_list_req == REQ_UPCOMING) {
-      s_list.pending_req = REQ_UPCOMING;
-      s_list.status = STATUS_LOADING;
-      s_list.count = 0;
-      s_list.error[0] = '\0';
-      if (s_list_menu) {
-        menu_layer_reload_data(s_list_menu);
+    if (window_stack_contains_window(s_detail_window) &&
+        s_detail.pending_req == REQ_DRAW_ROUND) {
+      s_detail.status = STATUS_LOADING;
+      s_detail.count = 0;
+      s_detail.error[0] = '\0';
+      if (s_detail_menu) {
+        menu_layer_reload_data(s_detail_menu);
       }
-      comm_request_ex(REQ_UPCOMING, persist_get_comp(), s_req_year,
-                      s_req_team[0] ? s_req_team : NULL);
+      comm_request_ex(REQ_DRAW_ROUND, persist_get_comp(), 0, s_req_team);
     }
     return;
   }
@@ -1569,14 +1734,15 @@ static void pin_unload(Window *window) {
   s_pin_waiting = false;
 }
 
-static void screens_show_pin_actions(uint16_t row) {
+static void screens_show_pin_draw_round(uint16_t row) {
+  scroll_stop_timer();
   s_pin_row = row;
   s_pin_waiting = false;
   s_pin_done = false;
   s_pin_ok = false;
   s_pin_status[0] = '\0';
   s_pin_error[0] = '\0';
-  s_pin_is_bye = line_is_bye(s_list.lines[row]);
+  s_pin_is_bye = line_is_bye(s_detail.lines[row]);
 
   char title[64];
   char sub[64];
@@ -1584,7 +1750,7 @@ static void screens_show_pin_actions(uint16_t row) {
   char home[8];
   char away[8];
   bool is_ladder = false;
-  format_row(REQ_UPCOMING, s_list.lines[row], title, sizeof(title), sub, sizeof(sub),
+  format_row(REQ_DRAW_ROUND, s_detail.lines[row], title, sizeof(title), sub, sizeof(sub),
              bot, sizeof(bot), home, sizeof(home), away, sizeof(away), &is_ladder);
   if (s_pin_is_bye || !home[0]) {
     strncpy(s_pin_header, title, sizeof(s_pin_header) - 1);
@@ -1642,6 +1808,7 @@ void screens_init(void) {
 
 void screens_deinit(void) {
   cancel_live_timer();
+  scroll_cancel();
   window_destroy(s_list_window);
   window_destroy(s_detail_window);
   window_destroy(s_year_window);

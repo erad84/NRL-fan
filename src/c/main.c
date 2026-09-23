@@ -10,17 +10,17 @@
 #define PERSIST_ODDS_RAW 7
 
 #if defined(PBL_PLATFORM_GABBRO)
-#define MAIN_HEADER_HEIGHT 210
+#define MAIN_HEADER_HEIGHT 228
 #define HEADER_COMP_LOGO 64
 #define HEADER_FAV_LOGO 64
 #define HEADER_FAV_GAP 12
 #elif defined(PBL_ROUND)
-#define MAIN_HEADER_HEIGHT 148
+#define MAIN_HEADER_HEIGHT 166
 #define HEADER_COMP_LOGO 48
 #define HEADER_FAV_LOGO 48
 #define HEADER_FAV_GAP 10
 #else
-#define MAIN_HEADER_HEIGHT 140
+#define MAIN_HEADER_HEIGHT 158
 #define HEADER_COMP_LOGO 48
 #define HEADER_FAV_LOGO 48
 #define HEADER_FAV_GAP 10
@@ -35,7 +35,6 @@ static bool s_vibe = true;
 static bool s_odds_raw = false;
 static Window *s_main_window;
 static MenuLayer *s_main_menu;
-static char s_upcoming_title[NRL_NAME_LEN];
 static char s_sum_pos[8];
 
 int persist_get_comp(void) {
@@ -243,7 +242,7 @@ static uint16_t main_num_rows(MenuLayer *layer, uint16_t section, void *context)
   (void)layer;
   (void)section;
   (void)context;
-  return 8;
+  return 7;
 }
 
 static int16_t main_cell_height(MenuLayer *layer, MenuIndex *index, void *context) {
@@ -273,12 +272,6 @@ static void main_draw_header_content(GContext *ctx, GRect bounds, bool highlight
                     HEADER_COMP_LOGO, HEADER_COMP_LOGO), highlight);
   }
 
-  char round_text[NRL_ROUND_LEN];
-  header_round_text(round_text, sizeof(round_text));
-  graphics_draw_text(ctx, round_text, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD),
-                     GRect(inset, top + HEADER_COMP_LOGO + 2, bounds.size.w - inset * 2, 28),
-                     GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
-
   const char *fav_code = club_code_for_nick(persist_get_fav());
   GBitmap *fav_bmp = logo_for_code(fav_code);
   char pos[12];
@@ -292,7 +285,7 @@ static void main_draw_header_content(GContext *ctx, GRect bounds, bool highlight
     group_w += HEADER_FAV_LOGO + HEADER_FAV_GAP;
   }
   int x = (bounds.size.w - group_w) / 2;
-  int row_y = top + HEADER_COMP_LOGO + 32;
+  int row_y = top + HEADER_COMP_LOGO + 4;
   if (fav_bmp) {
     draw_logo(ctx, fav_bmp, GRect(x, row_y, HEADER_FAV_LOGO, HEADER_FAV_LOGO), highlight);
     x += HEADER_FAV_LOGO + HEADER_FAV_GAP;
@@ -300,6 +293,17 @@ static void main_draw_header_content(GContext *ctx, GRect bounds, bool highlight
   graphics_draw_text(ctx, pos, pos_font,
                      GRect(x, row_y + (HEADER_FAV_LOGO - 28) / 2, pos_size.w + 8, 30),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+
+  const char *team = persist_fav_animal();
+  graphics_draw_text(ctx, team, fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
+                     GRect(inset, row_y + HEADER_FAV_LOGO + 2, bounds.size.w - inset * 2, 22),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
+
+  char round_text[NRL_ROUND_LEN];
+  header_round_text(round_text, sizeof(round_text));
+  graphics_draw_text(ctx, round_text, fonts_get_system_font(FONT_KEY_GOTHIC_14),
+                     GRect(inset, row_y + HEADER_FAV_LOGO + 24, bounds.size.w - inset * 2, 18),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentCenter, NULL);
 }
 
 static void main_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *index, void *context) {
@@ -315,16 +319,12 @@ static void main_draw_row(GContext *ctx, const Layer *cell_layer, MenuIndex *ind
   const char *title = "";
   const char *subtitle = NULL;
   switch (index->row) {
-    case 1:
-      title = persist_fav_animal();
-      subtitle = "upcoming rounds";
-      break;
-    case 2: title = origin ? "Series" : "Ladder"; break;
+    case 1: title = origin ? "Series" : "Ladder"; break;
+    case 2: title = "Draw"; break;
     case 3: title = "Live"; break;
-    case 4: title = "Draw"; break;
-    case 5: title = "My Team Results"; break;
-    case 6: title = "History"; break;
-    case 7:
+    case 4: title = "My Team Results"; break;
+    case 5: title = "History"; break;
+    case 6:
       title = "Competition";
       subtitle = comp_label(s_comp);
       break;
@@ -339,18 +339,13 @@ static void main_select(MenuLayer *layer, MenuIndex *index, void *context) {
     case 0:
       break;
     case 1:
-      snprintf(s_upcoming_title, sizeof(s_upcoming_title), "%s upcoming rounds",
-               persist_fav_animal());
-      screens_show_list(s_upcoming_title, REQ_UPCOMING);
-      break;
-    case 2:
       screens_show_list(is_origin_comp() ? "Series" : "Ladder", REQ_LADDER);
       break;
+    case 2: screens_show_list("Draw", REQ_DRAW); break;
     case 3: screens_show_list("Live", REQ_LIVE); break;
-    case 4: screens_show_list("Draw", REQ_DRAW); break;
-    case 5: screens_show_list("My Team Results", REQ_RESULTS); break;
-    case 6: screens_show_history(); break;
-    case 7: screens_show_comp_menu(); break;
+    case 4: screens_show_list("My Team Results", REQ_RESULTS); break;
+    case 5: screens_show_history(); break;
+    case 6: screens_show_comp_menu(); break;
   }
 }
 

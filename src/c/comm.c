@@ -101,7 +101,7 @@ void comm_request_ex(int req, int comp, int year, const char *team) {
   }
 }
 
-void comm_request_pin(int row, bool remaining) {
+void comm_request_pin_draw(const char *round_id, int row) {
   DictionaryIterator *iter;
   AppMessageResult result = app_message_outbox_begin(&iter);
   if (result != APP_MSG_OK) {
@@ -112,7 +112,9 @@ void comm_request_pin(int row, bool remaining) {
   dict_write_int32(iter, MESSAGE_KEY_REQ, REQ_PIN);
   dict_write_int32(iter, MESSAGE_KEY_COMP, persist_get_comp());
   dict_write_int32(iter, MESSAGE_KEY_ROW, row);
-  dict_write_int32(iter, MESSAGE_KEY_PIN_ALL, remaining ? 1 : 0);
+  if (round_id && round_id[0]) {
+    dict_write_cstring(iter, MESSAGE_KEY_TEAM, round_id);
+  }
   result = app_message_outbox_send();
   if (result != APP_MSG_OK) {
     APP_LOG(APP_LOG_LEVEL_ERROR, "Outbox send: %d", (int)result);

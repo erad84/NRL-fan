@@ -5,7 +5,7 @@ module.exports = [
   },
   {
     type: "text",
-    defaultValue: "Pick your sides. The watch uses these for Upcoming and My Team Results."
+    defaultValue: "Pick your sides. The watch uses these for Results and the home header."
   },
   {
     type: "section",

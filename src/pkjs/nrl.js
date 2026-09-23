@@ -34,6 +34,7 @@ var CACHE_LIVE = 20 * 1000;
 var CACHE_TEAM = 10 * 60 * 1000;
 var CACHE_LADDER = 5 * 60 * 1000;
 var lastUpcoming = null;
+var lastDrawRound = null;
 var PIN_STORE = "nrl-pinned-ids";
 var reminderLeadMins = [60];
 
@@ -330,6 +331,62 @@ function currentRoundValue(data, comp) {
     }
   }
   return "";
+}
+
+function roundLabelForValue(data, roundValue, comp) {
+  if (!roundValue || !data) {
+    return "";
+  }
+  var rounds = data.filterRounds || [];
+  var i;
+  for (i = 0; i < rounds.length; i++) {
+    if (roundValueOf(rounds[i]) === String(roundValue)) {
+      return roundLabel(rounds[i].name, comp);
+    }
+  }
+  return "";
+}
+
+function summaryRoundTitle(data, comp, year) {
+  var fx = matchesOf(data).filter(function (f) { return f.type === "Match"; });
+  var i;
+  for (i = 0; i < fx.length; i++) {
+    if (isLive(fx[i])) {
+      return roundLabel(fx[i].roundTitle, comp);
+    }
+  }
+  var fromRound = roundLabelForValue(data, currentRoundValue(data, comp), comp);
+  if (fromRound) {
+    return fromRound;
+  }
+  var upcoming = [];
+  for (i = 0; i < fx.length; i++) {
+    if (isUpcoming(fx[i])) {
+      upcoming.push(fx[i]);
+    }
+  }
+  upcoming.sort(function (a, b) { return kickoffMs(a) - kickoffMs(b); });
+  if (upcoming.length) {
+    return roundLabel(upcoming[0].roundTitle, comp);
+  }
+  if (fx.length && fx.every(isComplete)) {
+    return (year || seasonYear()) + " Season End";
+  }
+  var last = null;
+  var lastMs = 0;
+  for (i = 0; i < fx.length; i++) {
+    if (isComplete(fx[i])) {
+      var ms = kickoffMs(fx[i]);
+      if (ms >= lastMs) {
+        lastMs = ms;
+        last = fx[i];
+      }
+    }
+  }
+  if (last) {
+    return roundLabel(last.roundTitle, comp);
+  }
+  return isOrigin(comp) ? "Game" : "Round";
 }
 
 function isFinalsMatch(f) {
@@ -787,9 +844,14 @@ function handleRequest(comp, req, fav, year, team, callback) {
       if (first) {
         title = roundLabel(first.roundTitle, comp);
       }
+      lastDrawRound = {
+        comp: comp,
+        roundId: team,
+        fixtures: fx
+      };
       callback(null, {
         title: title,
-        lines: fx.map(function (f) { return matchLine(f, comp, true); })
+        lines: fx.map(function (f) { return drawRoundLine(f, comp); })
       });
     });
     return;
@@ -821,12 +883,13 @@ function handleRequest(comp, req, fav, year, team, callback) {
   }
 
   if (req === 8) {
-    var finishSummary = function (pos, data, err) {
+    var finishSummary = function (pos, fullData, teamData, err) {
       if (err) {
         callback(err);
         return;
       }
-      var fx = matchesOf(data).filter(function (f) {
+      var source = teamData || fullData;
+      var fx = matchesOf(source).filter(function (f) {
         return fixtureInvolves(f, fav, comp);
       });
       var live = fx.filter(isLive)[0];
@@ -835,7 +898,7 @@ function handleRequest(comp, req, fav, year, team, callback) {
         return isUpcoming(f) || isFutureBye(f, lastDone);
       })[0];
       var f = live || next;
-      var rnd = f ? roundLabel(f.roundTitle, comp) : (isOrigin(comp) ? "Game" : "Round");
+      var rnd = summaryRoundTitle(fullData, comp, year);
       var lines = ["POS|" + (pos || "-")];
       if (!f) {
         lines.push("NEXT|||");
@@ -846,20 +909,24 @@ function handleRequest(comp, req, fav, year, team, callback) {
         lines.push("NEXT|" + opp.code + "|" + opp.name);
       }
       callback(null, { title: rnd, lines: lines });
-    }
-    if (isOrigin(comp)) {
-      loadDraw(comp, null, year, CACHE_DRAW, function (err, data) {
-        finishSummary("", data, err);
-      });
-      return;
-    }
-    loadLadder(comp, year, function (err, ladder) {
-      var pos = "";
-      if (!err && ladder) {
-        pos = ladderPos(ladder, fav, comp);
+    };
+    loadDraw(comp, null, year, CACHE_DRAW, function (err, fullData) {
+      if (err) {
+        callback(err);
+        return;
       }
-      withTeamDraw(comp, fav, year, function (err2, data) {
-        finishSummary(pos, data, err2);
+      if (isOrigin(comp)) {
+        finishSummary("", fullData, fullData, null);
+        return;
+      }
+      loadLadder(comp, year, function (errLadder, ladder) {
+        var pos = "";
+        if (!errLadder && ladder) {
+          pos = ladderPos(ladder, fav, comp);
+        }
+        withTeamDraw(comp, fav, year, function (err2, teamData) {
+          finishSummary(pos, fullData, teamData, err2);
+        });
       });
     });
     return;
@@ -993,6 +1060,14 @@ function isPinnedId(id) {
 
 function isPinnedFixture(comp, f) {
   return f && f.type === "Match" && isPinnedId(pinId(comp, f));
+}
+
+function drawRoundLine(f, comp) {
+  var line = matchLine(f, comp, true);
+  if (isPinnedFixture(comp, f)) {
+    line += "|1";
+  }
+  return line;
 }
 
 function upcomingLine(f, comp) {
@@ -1160,6 +1235,44 @@ function pinsFromRow(comp, row, all) {
   return pins;
 }
 
+function prepareDrawRoundPins(comp, roundId, row, callback) {
+  row = parseInt(row, 10) || 0;
+  function finish(fixtures) {
+    if (row < 0 || row >= (fixtures || []).length) {
+      callback(new Error("Pin failed"));
+      return;
+    }
+    var f = fixtures[row];
+    if (!f || f.type === "Bye" || !isUpcoming(f)) {
+      callback(new Error("Pin failed"));
+      return;
+    }
+    var pin = buildSportsPin(comp, f);
+    if (!pin) {
+      callback(new Error("Pin failed"));
+      return;
+    }
+    callback(null, [pin]);
+  }
+  if (lastDrawRound && lastDrawRound.comp === comp &&
+      String(lastDrawRound.roundId) === String(roundId)) {
+    finish(lastDrawRound.fixtures);
+    return;
+  }
+  handleRequest(comp, 11, null, null, roundId, function (err) {
+    if (err) {
+      callback(err);
+      return;
+    }
+    if (!lastDrawRound || lastDrawRound.comp !== comp ||
+        String(lastDrawRound.roundId) !== String(roundId)) {
+      callback(new Error("Pin failed"));
+      return;
+    }
+    finish(lastDrawRound.fixtures);
+  });
+}
+
 function preparePins(comp, fav, row, all, year, team, callback) {
   var queryTeam = team || fav;
   row = parseInt(row, 10) || 0;
@@ -1187,6 +1300,7 @@ function preparePins(comp, fav, row, all, year, team, callback) {
 module.exports = {
   handleRequest: handleRequest,
   isOrigin: isOrigin,
+  prepareDrawRoundPins: prepareDrawRoundPins,
   preparePins: preparePins,
   buildSportsPin: buildSportsPin,
   rememberPins: rememberPins,

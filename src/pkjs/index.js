@@ -336,7 +336,11 @@ Pebble.addEventListener("appmessage", function (e) {
   if (req === 9) {
     try {
       nrl.setReminderLeadMins(settings.PIN_REMINDER);
-      nrl.preparePins(comp, fav, payload.ROW, !!payload.PIN_ALL, year, team, function (err, pins) {
+      if (!team) {
+        sendPinStatus(false, "", "Pin failed");
+        return;
+      }
+      nrl.prepareDrawRoundPins(comp, team, payload.ROW, function (err, pins) {
         if (err) {
           console.log("NRL Fan pin: " + err.message);
           sendPinStatus(false, "", err.message === "No Timeline token" ? "No Timeline token" : "Pin failed");

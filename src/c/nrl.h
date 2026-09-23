@@ -10,7 +10,7 @@
 #define NRL_LINE_LEN 56
 #define NRL_TITLE_LEN 32
 #define NRL_NAME_LEN 32
-#define NRL_ROUND_LEN 16
+#define NRL_ROUND_LEN 20
 #define NRL_TEAM_LEN 16
 #define NRL_YEAR_COUNT 12
 
@@ -73,7 +73,7 @@ void comm_init(void);
 void comm_deinit(void);
 void comm_request(int req, int comp);
 void comm_request_ex(int req, int comp, int year, const char *team);
-void comm_request_pin(int row, bool remaining);
+void comm_request_pin_draw(const char *round_id, int row);
 
 void screens_init(void);
 void screens_deinit(void);
